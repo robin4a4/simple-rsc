@@ -4,7 +4,12 @@ import { build as esbuild } from 'esbuild';
 import { fileURLToPath } from 'node:url';
 import { createElement } from 'react';
 import { serveStatic } from '@hono/node-server/serve-static';
-import * as ReactServerDom from 'react-server-dom-webpack/server.browser';
+import * as ReactDOMServer from 'react-dom/server';
+import * as ReactServerDOMServer from 'react-server-dom-webpack/server.browser';
+import * as ReactServerDOMClient from 'react-server-dom-webpack/client.browser';
+// @ts-ignore
+import { use } from 'react';
+
 import { readFile, writeFile } from 'node:fs/promises';
 import { parse } from 'es-module-lexer';
 import { relative } from 'node:path';
@@ -18,19 +23,35 @@ const clientComponentMap = {};
  * and stream results into `<div id="root">`
  */
 app.get('/', async (c) => {
-	return c.html(`
-	<!DOCTYPE html>
-	<html>
-	<head>
-		<title>React Server Components from Scratch</title>
-		<script src="https://cdn.tailwindcss.com"></script>
-	</head>
-	<body>
-		<div id="root"></div>
-		<script type="module" src="/build/_client.js"></script>
-	</body>
-	</html>
-	`);
+	const Page = await import('./build/page.js');
+	// @ts-expect-error `Type '() => Promise<any>' is not assignable to type 'FunctionComponent<{}>'`
+	const Comp = createElement(Page.default);
+
+	const stream = ReactServerDOMServer.renderToReadableStream(Comp, clientComponentMap);
+
+	const response = ReactServerDOMClient.createFromReadableStream(stream, {
+		ssrManifest: {
+			moduleMap: null,
+			moduleLoading: null
+		}
+	});
+
+	function ClientRoot() {
+		return use(response);
+	}
+
+	const ssrStream = await ReactDOMServer.renderToReadableStream(ClientRoot(), {
+		bootstrapScripts: ['/build/_client.js'],
+		bootstrapScriptContent: `
+		// HACK: map webpack resolution to native ESM
+		// @ts-expect-error Property '__webpack_require__' does not exist on type 'Window & typeof globalThis'.
+		window.__webpack_require__ = async (id) => {
+		  return import(id);
+		};`
+	});
+	return new Response(ssrStream, {
+		headers: { 'Content-type': 'text/html' }
+	});
 });
 
 /**
@@ -44,7 +65,7 @@ app.get('/rsc', async (c) => {
 	// @ts-expect-error `Type '() => Promise<any>' is not assignable to type 'FunctionComponent<{}>'`
 	const Comp = createElement(Page.default);
 
-	const stream = ReactServerDom.renderToReadableStream(Comp, clientComponentMap);
+	const stream = ReactServerDOMServer.renderToReadableStream(Comp, clientComponentMap);
 	return new Response(stream);
 });
 

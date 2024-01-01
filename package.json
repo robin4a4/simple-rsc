@@ -5,8 +5,8 @@
 	"main": "server/index.js",
 	"type": "module",
 	"scripts": {
-		"start": "node server.js",
-		"dev": "node server.js",
+		"start": "node --conditions react-server server.js",
+		"dev": "node --conditions react-server server.js",
 		"lint": "eslint '**/*.{js,jsx,ts,tsx}'",
 		"lint:fix": "eslint --fix '**/*.{js,jsx,ts,tsx}'",
 		"format": "prettier --check . --ignore-path .gitignore !package.json !pnpm-lock.yaml",
